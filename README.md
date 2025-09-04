@@ -16,6 +16,7 @@ A simple **remote control app** that allows you to control your laptop's mouse a
 # Usage
 
 ```
+
 git clone https://github.com/yashKathoke/laptop-control-with-mobile.git
 cd laptop-control-with-mobile
 ```
