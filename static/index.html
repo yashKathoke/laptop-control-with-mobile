@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Remote Mouse & Keyboard</title>
+ <style>
+    /* Reset */
+* { box-sizing: border-box; margin:0; padding:0; }
+
+body {
+  font-family: 'Courier New', Courier, monospace;
+  background: #0b0c10;
+  color: #66ff66;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
+}
+
+h2 {
+  margin: 20px 0 10px;
+  font-weight: normal;
+  font-size: 1.5rem;
+  text-shadow: 0 0 4px #66ff66;
+  letter-spacing: 1px;
+  text-align: center;
+}
+
+/* Connect Overlay */
+#connectOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.95);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+#connectOverlay h3 {
+  margin-bottom: 20px;
+  font-weight: normal;
+  font-size: 1.4rem;
+  text-shadow: 0 0 3px #66ff66;
+  text-align: center;
+}
+
+#connectBtn {
+  padding: 15px 36px;
+  font-size: 1.05rem;
+  border-radius: 16px;
+  border: 2px solid #66ff66;
+  background: #0b0c10;
+  color: #66ff66;
+  cursor: pointer;
+  box-shadow: 0 0 6px #66ff66;
+  transition: 0.15s;
+}
+
+#connectBtn:hover { background:#1f1f1f; box-shadow:0 0 12px #66ff66; }
+#connectBtn:active { transform: translateY(1px); box-shadow:0 0 4px #66ff66; }
+
+/* Top bar */
+#topBar {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px;
+  z-index: 10;
+}
+
+/* Disconnect button replaced with emoji */
+#disconnectBtn {
+  font-size: 1.6rem; /* make emoji larger for easy tap */
+  padding: 4px 8px;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: #ff3333;
+  transition: 0.1s;
+}
+
+#disconnectBtn:hover { transform: scale(1.2); }
+#disconnectBtn:active { transform: scale(1); }
+
+/* Touchpad */
+/* Touchpad */
+#touchpad {
+  flex: 1.2;            /* allow it to grow more than other elements */
+  width: 98%;            /* still almost full width */
+  max-height: 65%;       /* increase maximum height */
+  background: #1f1f1f;
+  border: 2px solid #66ff66;
+  border-radius: 12px;
+  margin: 5px 0;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+/* Ensure buttons and keyboard input don't shrink */
+#buttons, #keyboardInput {
+  flex-shrink: 0;
+}
+
+
+/* Action buttons - horizontal */
+#buttons {
+  display: flex;
+  justify-content: space-between;
+  width: 95%;
+  margin-bottom: 8px;
+  gap: 6px;
+}
+
+button.action-btn {
+  flex: 1;
+  padding: 12px;
+  font-size: 0.95rem;
+  border-radius: 10px;
+  border: 2px solid #66ff66;
+  background: #0b0c10;
+  color: #66ff66;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+button.action-btn:hover { background:#1f1f1f; box-shadow:0 0 10px #66ff66; }
+button.action-btn:active { transform: translateY(1px); }
+
+/* Keyboard input */
+#keyboardInput {
+  width: 95%;
+  padding: 10px;
+  font-size: 0.95rem;
+  border-radius: 10px;
+  border: 2px solid #66ff66;
+  background: #1f1f1f;
+  color: #66ff66;
+  outline: none;
+  margin-bottom: 10px;
+  position: relative;
+}
+
+#keyboardInput::placeholder { color: #66ff66aa; }
+
+/* Mobile adjustments */
+@media (max-width: 500px) {
+  #touchpad { max-height: 60%; }
+  #buttons { flex-direction: row; gap: 6px; }
+  button.action-btn { font-size: 0.9rem; padding: 10px; }
+  #keyboardInput { font-size: 0.9rem; padding: 8px; }
+}
+
+ </style>
+</head>
+<body>
+
+<h2>Remote Mouse & Keyboard</h2>
+
+<!-- Connect Overlay -->
+<div id="connectOverlay">
+  <h3>Connect to your Laptop</h3>
+  <button id="connectBtn">Connect</button>
+</div>
+
+<!-- Top bar -->
+<div id="topBar" style="display:none;">
+  <button id="disconnectBtn"></button>
+</div>
+
+<!-- Touchpad -->
+<div id="touchpad"></div>
+
+<!-- Action buttons -->
+<div id="buttons">
+  <button class="action-btn" onclick="send('click:left')">Left Click</button>
+  <button class="action-btn" onclick="send('click:right')">Right Click</button>
+</div>
+
+<div id="settings" style="width:95%; margin-bottom:10px; text-align:center;">
+  <label for="sensitivityRange">Touchpad Sensitivity: <span id="sensitivityValue">1.5</span>x</label>
+  <input type="range" id="sensitivityRange" min="0.5" max="3" step="0.1" value="1.5" />
+</div>
+
+
+<!-- Keyboard -->
+<input id="keyboardInput" placeholder="Tap here to type..." />
+
+<script>
+
+// --- WebSocket and connection logic remains unchanged ---
+let ws = null;
+let isConnected = false;
+
+const connectOverlay = document.getElementById('connectOverlay');
+const connectBtn = document.getElementById('connectBtn');
+const topBar = document.getElementById('topBar');
+const disconnectBtn = document.getElementById('disconnectBtn');
+const input = document.getElementById('keyboardInput');
+
+function connect() {
+  if (ws) ws.close();
+  ws = new WebSocket("ws://" + location.hostname + ":8765");
+
+  ws.onopen = () => {
+    isConnected = true;
+    connectOverlay.style.display = "none";
+    topBar.style.display = "flex";
+  };
+
+  ws.onclose = ws.onerror = () => {
+    isConnected = false;
+    connectOverlay.style.display = "flex";
+    topBar.style.display = "none";
+  };
+}
+
+connectBtn.addEventListener('click', connect);
+disconnectBtn.addEventListener('click', () => { if(ws) ws.close(); });
+
+function send(msg) { if(isConnected && ws.readyState === WebSocket.OPEN) ws.send(msg); }
+
+// --- Optimized Touchpad Handling ---
+// --- Optimized Touchpad with larger movement area ---
+let lastX = 0, lastY = 0, deltaX = 0, deltaY = 0, touchStartTime = 0, touchMoved = false;
+const touchpad = document.getElementById('touchpad');
+
+// --- Sensitivity ---
+let MOVE_SCALE = 1.5; // default
+const sensitivityRange = document.getElementById('sensitivityRange');
+const sensitivityValue = document.getElementById('sensitivityValue');
+
+sensitivityRange.addEventListener('input', e => {
+  MOVE_SCALE = parseFloat(e.target.value);
+  sensitivityValue.textContent = MOVE_SCALE.toFixed(1);
+});
+
+// --- Touchpad movement --- (keep rest as before)
+touchpad.addEventListener('touchmove', e => {
+  const touches = e.touches;
+  if (touches.length === 1) {
+    const dx = (touches[0].clientX - lastX) * MOVE_SCALE;
+    const dy = (touches[0].clientY - lastY) * MOVE_SCALE;
+    lastX = touches[0].clientX;
+    lastY = touches[0].clientY;
+    deltaX += dx;
+    deltaY += dy;
+    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) touchMoved = true;
+  } else if (touches.length === 2) {
+    const avgX = (touches[0].clientX + touches[1].clientX) / 2;
+    const avgY = (touches[0].clientY + touches[1].clientY) / 2;
+    const dx = avgX - lastX;
+    const dy = avgY - lastY;
+    lastX = avgX;
+    lastY = avgY;
+    if (isConnected && (Math.abs(dx) >= 1 || Math.abs(dy) >= 1)) {
+      send(`scroll:${Math.sign(dx)}:${-Math.sign(dy)}`);
+    }
+  }
+});
+
+// Scaling factor for larger movement area
+// const MOVE_SCALE = 1.5; // increase this to make movement more sensitive
+
+function sendMove() {
+  if ((Math.abs(deltaX) > 0 || Math.abs(deltaY) > 0) && isConnected) {
+    send(`move:${deltaX}:${deltaY}`);
+    deltaX = 0;
+    deltaY = 0;
+  }
+  requestAnimationFrame(sendMove);
+}
+requestAnimationFrame(sendMove);
+
+touchpad.addEventListener('touchstart', e => {
+  const touches = e.touches;
+  if (touches.length === 1) {
+    lastX = touches[0].clientX;
+    lastY = touches[0].clientY;
+  } else if (touches.length === 2) {
+    lastX = (touches[0].clientX + touches[1].clientX) / 2;
+    lastY = (touches[0].clientY + touches[1].clientY) / 2;
+  }
+  touchStartTime = Date.now();
+  touchMoved = false;
+});
+
+touchpad.addEventListener('touchmove', e => {
+  const touches = e.touches;
+  if (touches.length === 1) {
+    const dx = (touches[0].clientX - lastX) * MOVE_SCALE;
+    const dy = (touches[0].clientY - lastY) * MOVE_SCALE;
+    lastX = touches[0].clientX;
+    lastY = touches[0].clientY;
+    deltaX += dx;
+    deltaY += dy;
+    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) touchMoved = true;
+  } else if (touches.length === 2) {
+    const avgX = (touches[0].clientX + touches[1].clientX) / 2;
+    const avgY = (touches[0].clientY + touches[1].clientY) / 2;
+    const dx = avgX - lastX;
+    const dy = avgY - lastY;
+    lastX = avgX;
+    lastY = avgY;
+    if (isConnected && (Math.abs(dx) >= 1 || Math.abs(dy) >= 1)) {
+      send(`scroll:${Math.sign(dx)}:${-Math.sign(dy)}`);
+    }
+  }
+});
+
+touchpad.addEventListener('touchend', e => {
+  const duration = Date.now() - touchStartTime;
+  if (e.touches.length === 0) {
+    if (!touchMoved && duration < 200) send("click:left");          // single tap
+    else if (!touchMoved && duration < 250 && e.changedTouches.length === 2) send("click:right"); // two-finger tap
+  }
+});
+
+
+// --- Keyboard handling remains unchanged ---
+input.addEventListener('input', e => {
+  const value = e.target.value;
+  if(value.length > 0) { send(`text:${value}`); e.target.value=''; }
+});
+input.addEventListener('keydown', e => {
+  if(["Enter","Backspace","Tab","Escape","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)){
+    e.preventDefault();
+    send(`key:${e.key}`);
+  }
+});
+
+
+
+</script>
+</body>
+</html>
